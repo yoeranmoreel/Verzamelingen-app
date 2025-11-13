@@ -731,294 +731,313 @@
         </div>
     </div>
 
-    <script>
-        const SHEET_ID = '1ZfoFJp-J_9zgfJ7NaBfDFVrhOdP7nfOzM-zMJZTucWA';
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw1QqXxcw6rQnD6mucT7_PvYnhwVrSqMp3PlWWLHeAOirAcy93Hps5Hq7_xo1jWTQ18/exec';
-        
-        let currentUser = null;
-        let currentVerzameling = null;
-        let verzamelingen = [];
+   <script>
+    // Google Sheets & Script configuratie
+    const SHEET_ID = '1ZfoFJp-J_9zgfJ7NaBfDFVrhOdP7nfOzM-zMJZTucWA';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxqrDXfotDCSz_kdzB_gRrPZBaYMDRZtKn0iAtF8URkqPXgl-UBDoSOm5vutUv--3Of/exec';
+    
+    let currentUser = null;
+    let currentVerzameling = null;
+    let verzamelingen = [];
 
-        window.onload = function() {
-            const savedUser = localStorage.getItem('verzameling_user');
-            if (savedUser) {
-                currentUser = JSON.parse(savedUser);
-                showApp();
-            }
-        };
-
-        function createUser() {
-            const username = document.getElementById('usernameInput').value.trim();
-            const email = document.getElementById('emailInput').value.trim();
-            if (!username) {
-                alert('Vul een gebruikersnaam in');
-                return;
-            }
-            const userId = Date.now().toString();
-            currentUser = {id: userId, username: username, email: email};
-            localStorage.setItem('verzameling_user', JSON.stringify(currentUser));
+    window.onload = function() {
+        const savedUser = localStorage.getItem('verzameling_user');
+        if (savedUser) {
+            currentUser = JSON.parse(savedUser);
             showApp();
         }
+    };
 
-        function logout() {
-            if (confirm('Weet je zeker dat je wilt uitloggen?')) {
-                localStorage.removeItem('verzameling_user');
-                location.reload();
-            }
+    function createUser() {
+        const username = document.getElementById('usernameInput').value.trim();
+        const email = document.getElementById('emailInput').value.trim();
+        if (!username) {
+            alert('Vul een gebruikersnaam in');
+            return;
         }
+        const userId = Date.now().toString();
+        currentUser = { id: userId, username: username, email: email };
+        localStorage.setItem('verzameling_user', JSON.stringify(currentUser));
+        showApp();
+    }
 
-        function showApp() {
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('appScreen').style.display = 'block';
-            document.getElementById('welcomeText').textContent = 'Welkom terug, ' + currentUser.username;
+    function logout() {
+        if (confirm('Weet je zeker dat je wilt uitloggen?')) {
+            localStorage.removeItem('verzameling_user');
+            location.reload();
+        }
+    }
+
+    function showApp() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appScreen').style.display = 'block';
+        document.getElementById('welcomeText').textContent = 'Welkom terug, ' + currentUser.username;
+        loadVerzamelingen();
+    }
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        if (tabName === 'verzamelingen') {
+            document.querySelectorAll('.tab')[0].classList.add('active');
+            document.getElementById('verzamelingen').classList.add('active');
             loadVerzamelingen();
+        } else if (tabName === 'alle-items') {
+            document.querySelectorAll('.tab')[1].classList.add('active');
+            document.getElementById('alle-items').classList.add('active');
+            loadAlleItems();
         }
+    }
 
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            if (tabName === 'verzamelingen') {
-                document.querySelectorAll('.tab')[0].classList.add('active');
-                document.getElementById('verzamelingen').classList.add('active');
-                loadVerzamelingen();
-            } else if (tabName === 'alle-items') {
-                document.querySelectorAll('.tab')[1].classList.add('active');
-                document.getElementById('alle-items').classList.add('active');
-                loadAlleItems();
-            }
+    async function loadVerzamelingen() {
+        document.getElementById('verzamelingenList').innerHTML = '<div class="loading">Laden...</div>';
+        try {
+            const data = await fetchFromSheet('Verzamelingen');
+            verzamelingen = data.filter(row => row[1] === currentUser.id).map(row => ({
+                id: row[0],
+                userId: row[1],
+                naam: row[2],
+                beschrijving: row[3],
+                categorie: row[4],
+                aangemaakt: row[5]
+            }));
+            await displayVerzamelingen();
+        } catch (error) {
+            console.error(error);
+            displayVerzamelingen();
         }
+    }
 
-        async function loadVerzamelingen() {
-            document.getElementById('verzamelingenList').innerHTML = '<div class="loading">Laden...</div>';
-            try {
-                const data = await fetchFromSheet('Verzamelingen');
-                verzamelingen = data.filter(row => row[1] === currentUser.id).map(row => ({
-                    id: row[0], userId: row[1], naam: row[2], beschrijving: row[3], categorie: row[4], aangemaakt: row[5]
-                }));
-                await displayVerzamelingen();
-            } catch (error) {
-                displayVerzamelingen();
-            }
-        }
-
-        async function displayVerzamelingen() {
-            const container = document.getElementById('verzamelingenList');
-            let itemCounts = {};
-            try {
-                const itemData = await fetchFromSheet('Items');
-                itemData.forEach(row => {
-                    if (row[1] === currentUser.id) {
-                        itemCounts[row[2]] = (itemCounts[row[2]] || 0) + 1;
-                    }
-                });
-            } catch (error) {}
-            const cards = verzamelingen.map(v => 
-                '<div class="verzameling-card" onclick="openVerzameling(\'' + v.id + '\')"><h3>' + v.naam + '</h3><p>' + 
-                (v.beschrijving || 'Geen beschrijving') + '</p><p><strong>' + (v.categorie || 'Algemeen') + 
-                '</strong></p><div class="count">' + (itemCounts[v.id] || 0) + '</div></div>'
-            ).join('');
-            container.innerHTML = cards + '<div class="verzameling-card add-verzameling-card" onclick="openModal(\'verzamelingModal\')"><div class="icon">+</div><h3>Nieuwe Verzameling</h3></div>';
-        }
-
-        async function addVerzameling(event) {
-            event.preventDefault();
-            const form = event.target;
-            const formData = new FormData(form);
-            const id = Date.now().toString();
-            const values = [id, currentUser.id, formData.get('naam'), formData.get('beschrijving'), formData.get('categorie'), new Date().toLocaleString('nl-NL')];
-            try {
-                await appendToSheet('Verzamelingen', [values]);
-                closeModal('verzamelingModal');
-                form.reset();
-                loadVerzamelingen();
-            } catch (error) {
-                alert('Fout bij opslaan: ' + error.message);
-            }
-        }
-
-        async function openVerzameling(verzamelingId) {
-            currentVerzameling = verzamelingen.find(v => v.id === verzamelingId);
-            document.getElementById('verzamelingTitle').textContent = currentVerzameling.naam;
-            document.getElementById('verzamelingDescription').textContent = currentVerzameling.beschrijving || '';
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            document.getElementById('verzameling-detail').classList.add('active');
-            await loadVerzamelingItems(verzamelingId);
-        }
-
-        async function loadVerzamelingItems(verzamelingId) {
-            document.getElementById('verzamelingItems').innerHTML = '<div class="loading">Laden...</div>';
-            try {
-                const data = await fetchFromSheet('Items');
-                const items = data.filter(row => row[1] === currentUser.id && row[2] === verzamelingId).map(row => ({
-                    id: row[0], titel: row[3], auteur: row[4], serie: row[5], nummer: row[6], jaar: row[7], staat: row[12], foto: row[16]
-                }));
-                displayItems(items, 'verzamelingItems');
-            } catch (error) {
-                document.getElementById('verzamelingItems').innerHTML = '<div class="empty-state"><h3>Nog geen items</h3><p>Voeg je eerste item toe</p></div>';
-            }
-        }
-
-        async function loadAlleItems() {
-            document.getElementById('alleItemsList').innerHTML = '<div class="loading">Laden...</div>';
-            try {
-                const data = await fetchFromSheet('Items');
-                const items = data.filter(row => row[1] === currentUser.id).map(row => ({
-                    id: row[0], titel: row[3], auteur: row[4], serie: row[5], nummer: row[6], jaar: row[7], staat: row[12], foto: row[16]
-                }));
-                displayItems(items, 'alleItemsList');
-            } catch (error) {
-                document.getElementById('alleItemsList').innerHTML = '<div class="empty-state"><h3>Nog geen items</h3></div>';
-            }
-        }
-
-        function displayItems(itemsList, containerId) {
-            const container = document.getElementById(containerId);
-            if (itemsList.length === 0) {
-                container.innerHTML = '<div class="empty-state"><h3>Nog geen items</h3><p>Voeg je eerste item toe</p></div>';
-                return;
-            }
-            container.innerHTML = '<div class="items-grid">' + itemsList.map(item => 
-                '<div class="item-card"><div class="item-image">' + (item.foto ? '<img src="' + item.foto + '" alt="' + item.titel + '" onerror="this.parentElement.innerHTML=\'▢\'">' : '▢') + 
-                '</div><div class="item-content"><h3>' + item.titel + '</h3>' + 
-                (item.auteur ? '<p><strong>Door:</strong> ' + item.auteur + '</p>' : '') + 
-                (item.serie ? '<p><strong>Serie:</strong> ' + item.serie + (item.nummer ? ' #' + item.nummer : '') + '</p>' : '') + 
-                (item.jaar ? '<p><strong>Jaar:</strong> ' + item.jaar + '</p>' : '') + 
-                (item.staat ? '<p><strong>Staat:</strong> ' + item.staat + '</p>' : '') + 
-                '</div><div class="item-actions"><button class="btn btn-danger btn-small" onclick="deleteItem(\'' + item.id + '\')">Verwijderen</button></div></div>'
-            ).join('') + '</div>';
-        }
-
-        async function addItem(event) {
-            event.preventDefault();
-            if (!currentVerzameling) {
-                alert('Selecteer eerst een verzameling');
-                return;
-            }
-            const form = event.target;
-            const formData = new FormData(form);
-            
-            let fotoUrl = formData.get('fotourl');
-            const fotoFile = document.getElementById('fotoInput').files[0];
-            
-            if (fotoFile) {
-                try {
-                    const reader = new FileReader();
-                    reader.onload = async function(e) {
-                        const base64Data = e.target.result;
-                        const uploadResult = await uploadPhotoToDrive(base64Data, fotoFile.name, fotoFile.type);
-                        if (uploadResult.success) {
-                            fotoUrl = uploadResult.url;
-                        }
-                        await saveItem(formData, fotoUrl, form);
-                    };
-                    reader.readAsDataURL(fotoFile);
-                    return;
-                } catch (error) {
-                    console.error('Foto upload error:', error);
+    async function displayVerzamelingen() {
+        const container = document.getElementById('verzamelingenList');
+        let itemCounts = {};
+        try {
+            const itemData = await fetchFromSheet('Items');
+            itemData.forEach(row => {
+                if (row[1] === currentUser.id) {
+                    itemCounts[row[2]] = (itemCounts[row[2]] || 0) + 1;
                 }
-            }
-            
-            await saveItem(formData, fotoUrl, form);
+            });
+        } catch (error) {}
+        const cards = verzamelingen.map(v =>
+            `<div class="verzameling-card" onclick="openVerzameling('${v.id}')">
+                <h3>${v.naam}</h3>
+                <p>${v.beschrijving || 'Geen beschrijving'}</p>
+                <p><strong>${v.categorie || 'Algemeen'}</strong></p>
+                <div class="count">${itemCounts[v.id] || 0}</div>
+            </div>`
+        ).join('');
+        container.innerHTML =
+            cards +
+            `<div class="verzameling-card add-verzameling-card" onclick="openModal('verzamelingModal')">
+                <div class="icon">+</div>
+                <h3>Nieuwe Verzameling</h3>
+            </div>`;
+    }
+
+    async function addVerzameling(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        const id = Date.now().toString();
+        const values = [id, currentUser.id, formData.get('naam'), formData.get('beschrijving'), formData.get('categorie'), new Date().toLocaleString('nl-NL')];
+        try {
+            await appendToSheet('Verzamelingen', [values]);
+            closeModal('verzamelingModal');
+            form.reset();
+            loadVerzamelingen();
+        } catch (error) {
+            alert('Fout bij opslaan: ' + error.message);
+        }
+    }
+
+    async function openVerzameling(verzamelingId) {
+        currentVerzameling = verzamelingen.find(v => v.id === verzamelingId);
+        document.getElementById('verzamelingTitle').textContent = currentVerzameling.naam;
+        document.getElementById('verzamelingDescription').textContent = currentVerzameling.beschrijving || '';
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        document.getElementById('verzameling-detail').classList.add('active');
+        await loadVerzamelingItems(verzamelingId);
+    }
+
+    async function loadVerzamelingItems(verzamelingId) {
+        document.getElementById('verzamelingItems').innerHTML = '<div class="loading">Laden...</div>';
+        try {
+            const data = await fetchFromSheet('Items');
+            const items = data.filter(row => row[1] === currentUser.id && row[2] === verzamelingId).map(row => ({
+                id: row[0], titel: row[3], auteur: row[4], serie: row[5], nummer: row[6], jaar: row[7], staat: row[12], foto: row[16]
+            }));
+            displayItems(items, 'verzamelingItems');
+        } catch (error) {
+            document.getElementById('verzamelingItems').innerHTML = '<div class="empty-state"><h3>Nog geen items</h3><p>Voeg je eerste item toe</p></div>';
+        }
+    }
+
+    async function loadAlleItems() {
+        document.getElementById('alleItemsList').innerHTML = '<div class="loading">Laden...</div>';
+        try {
+            const data = await fetchFromSheet('Items');
+            const items = data.filter(row => row[1] === currentUser.id).map(row => ({
+                id: row[0], titel: row[3], auteur: row[4], serie: row[5], nummer: row[6], jaar: row[7], staat: row[12], foto: row[16]
+            }));
+            displayItems(items, 'alleItemsList');
+        } catch (error) {
+            document.getElementById('alleItemsList').innerHTML = '<div class="empty-state"><h3>Nog geen items</h3></div>';
+        }
+    }
+
+    function displayItems(itemsList, containerId) {
+        const container = document.getElementById(containerId);
+        if (itemsList.length === 0) {
+            container.innerHTML = '<div class="empty-state"><h3>Nog geen items</h3><p>Voeg je eerste item toe</p></div>';
+            return;
+        }
+        container.innerHTML =
+            '<div class="items-grid">' +
+            itemsList.map(item =>
+                `<div class="item-card">
+                    <div class="item-image">${item.foto ? `<img src="${item.foto}" alt="${item.titel}" onerror="this.parentElement.innerHTML='▢'">` : '▢'}</div>
+                    <div class="item-content">
+                        <h3>${item.titel}</h3>
+                        ${item.auteur ? `<p><strong>Door:</strong> ${item.auteur}</p>` : ''}
+                        ${item.serie ? `<p><strong>Serie:</strong> ${item.serie}${item.nummer ? ' #' + item.nummer : ''}</p>` : ''}
+                        ${item.jaar ? `<p><strong>Jaar:</strong> ${item.jaar}</p>` : ''}
+                        ${item.staat ? `<p><strong>Staat:</strong> ${item.staat}</p>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-danger btn-small" onclick="deleteItem('${item.id}')">Verwijderen</button>
+                    </div>
+                </div>`
+            ).join('') +
+            '</div>';
+    }
+
+    async function addItem(event) {
+        event.preventDefault();
+        if (!currentVerzameling) {
+            alert('Selecteer eerst een verzameling');
+            return;
+        }
+        const form = event.target;
+        const formData = new FormData(form);
+
+        let fotoUrl = formData.get('fotourl');
+        const fotoFile = document.getElementById('fotoInput').files[0];
+
+        if (fotoFile) {
+            const reader = new FileReader();
+            reader.onload = async function (e) {
+                const base64Data = e.target.result;
+                const uploadResult = await uploadPhotoToDrive(base64Data, fotoFile.name, fotoFile.type);
+                if (uploadResult.success) {
+                    fotoUrl = uploadResult.url;
+                }
+                await saveItem(formData, fotoUrl, form);
+            };
+            reader.readAsDataURL(fotoFile);
+            return;
         }
 
-        async function saveItem(formData, fotoUrl, form) {
-            const id = Date.now().toString();
-            const values = [
-                id, currentUser.id, currentVerzameling.id, formData.get('titel'), 
-                formData.get('auteur') || '', formData.get('serie') || '', formData.get('nummer') || '', 
-                formData.get('jaar') || '', formData.get('uitgever') || '', formData.get('isbn') || '', 
-                formData.get('taal') || '', formData.get('genre') || '', formData.get('staat') || '', 
-                formData.get('prijs') || '', formData.get('datum') || '', formData.get('locatie') || '', 
-                fotoUrl || '', formData.get('opmerking') || ''
-            ];
-            try {
-                await appendToSheet('Items', [values]);
-                closeModal('itemModal');
-                form.reset();
-                document.getElementById('imagePreview').style.display = 'none';
-                loadVerzamelingItems(currentVerzameling.id);
-            } catch (error) {
-                alert('Fout bij opslaan: ' + error.message);
-            }
-        }
+        await saveItem(formData, fotoUrl, form);
+    }
 
-        async function uploadPhotoToDrive(base64Data, fileName, mimeType) {
-            try {
-                const response = await fetch(SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        action: 'uploadPhoto',
-                        imageData: base64Data,
-                        fileName: fileName,
-                        mimeType: mimeType
-                    })
-                });
-                const result = await response.json();
-                return result;
-            } catch (error) {
-                console.error('Upload error:', error);
-                return {success: false, error: error.message};
-            }
+    async function saveItem(formData, fotoUrl, form) {
+        const id = Date.now().toString();
+        const values = [
+            id, currentUser.id, currentVerzameling.id, formData.get('titel'),
+            formData.get('auteur') || '', formData.get('serie') || '', formData.get('nummer') || '',
+            formData.get('jaar') || '', formData.get('uitgever') || '', formData.get('isbn') || '',
+            formData.get('taal') || '', formData.get('genre') || '', formData.get('staat') || '',
+            formData.get('prijs') || '', formData.get('datum') || '', formData.get('locatie') || '',
+            fotoUrl || '', formData.get('opmerking') || ''
+        ];
+        try {
+            await appendToSheet('Items', [values]);
+            closeModal('itemModal');
+            form.reset();
+            document.getElementById('imagePreview').style.display = 'none';
+            loadVerzamelingItems(currentVerzameling.id);
+        } catch (error) {
+            alert('Fout bij opslaan: ' + error.message);
         }
+    }
 
-        function deleteItem(itemId) {
-            alert('Verwijderen: Open Google Sheets om items handmatig te verwijderen:\nhttps://docs.google.com/spreadsheets/d/' + SHEET_ID);
-        }
-
-        function openModal(modalId) {
-            document.getElementById(modalId).style.display = 'block';
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = 'none';
-        }
-
-        function openAddItemModal() {
-            openModal('itemModal');
-        }
-
-        function previewImage(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const preview = document.getElementById('imagePreview');
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        async function fetchFromSheet(sheetName) {
-            try {
-                const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:json&sheet=' + sheetName;
-                const response = await fetch(url);
-                const text = await response.text();
-                const json = JSON.parse(text.substring(47).slice(0, -2));
-                if (!json.table || !json.table.rows) return [];
-                return json.table.rows.map(row => row.c.map(cell => cell ? cell.v : ''));
-            } catch (error) {
-                return [];
-            }
-        }
-
-        async function appendToSheet(sheetName, values) {
+    async function uploadPhotoToDrive(base64Data, fileName, mimeType) {
+        try {
             const response = await fetch(SCRIPT_URL, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sheet: sheetName, values: values})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'uploadPhoto',
+                    imageData: base64Data,
+                    fileName: fileName,
+                    mimeType: mimeType
+                })
             });
-            return true;
+            return await response.json();
+        } catch (error) {
+            console.error('Upload error:', error);
+            return { success: false, error: error.message };
         }
+    }
 
-        window.onclick = function(event) {
-            if (event.target.classList.contains('modal')) {
-                event.target.style.display = 'none';
-            }
-        };
-    </script>
+    function deleteItem(itemId) {
+        alert('Verwijderen: open de Google Sheet om items handmatig te verwijderen:\nhttps://docs.google.com/spreadsheets/d/' + SHEET_ID);
+    }
+
+    function openModal(id) {
+        document.getElementById(id).style.display = 'block';
+    }
+    function closeModal(id) {
+        document.getElementById(id).style.display = 'none';
+    }
+    function openAddItemModal() {
+        openModal('itemModal');
+    }
+
+    function previewImage(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const preview = document.getElementById('imagePreview');
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    async function fetchFromSheet(sheetName) {
+        try {
+            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+            const response = await fetch(url);
+            const text = await response.text();
+            const json = JSON.parse(text.substring(47).slice(0, -2));
+            if (!json.table || !json.table.rows) return [];
+            return json.table.rows.map(row => row.c.map(cell => (cell ? cell.v : '')));
+        } catch (error) {
+            console.error('fetchFromSheet error:', error);
+            return [];
+        }
+    }
+
+    async function appendToSheet(sheetName, values) {
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sheet: sheetName, values: values })
+        });
+        return true;
+    }
+
+    window.onclick = function (event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+        }
+    };
+</script>
+
 </body>
 </html>
